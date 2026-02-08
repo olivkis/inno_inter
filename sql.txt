@@ -1,0 +1,100 @@
+--Output the number of movies in each category, sorted descending
+SELECT category.name, 
+       COUNT(film_id) AS movie_count
+FROM film_category LEFT JOIN category using(category_id) 
+GROUP BY category.name
+ORDER BY movie_count DESC
+
+  
+--Output the 10 actors whose movies rented the most, sorted in descending order
+SELECT a.first_name, 
+       a.last_name, 
+	   COUNT(fa.film_id) AS rental_count
+FROM actor a LEFT JOIN film_actor fa using(actor_id)
+GROUP BY a.actor_id
+ORDER BY rental_count DESC
+LIMIT 10
+
+-- Output the category of movies on which the most money was spent
+SELECT c.name, 
+       SUM(p.amount) AS costs
+FROM category c 
+LEFT JOIN film_category fc using(category_id)
+LEFT JOIN inventory i using(film_id)
+LEFT JOIN rental r using(inventory_id)
+LEFT JOIN payment p using(rental_id)
+GROUP BY c.category_id
+ORDER BY costs DESC
+LIMIT 1
+
+  
+--Print the names of movies that are not in the inventory. 
+--Write a query without using the IN operator
+SELECT f.title
+FROM film f LEFT JOIN inventory i using(film_id) 
+WHERE i.film_id IS NULL
+
+  
+-- Output the top 3 actors who have appeared the most in movies in the “Children” category. 
+-- If several actors have the same number of movies, output all of them.
+SELECT first_name,
+	   last_name
+FROM (SELECT c.name,
+		   a.first_name,
+		   a.last_name,
+		   DENSE_RANK() OVER(ORDER BY COUNT(*) DESC) AS actors_rank
+	FROM actor a 
+	LEFT JOIN film_actor using(actor_id)
+	LEFT JOIN film_category using(film_id)
+	LEFT JOIN category c using(category_id)  
+	WHERE c.name='Children' 
+	GROUP BY c.name, a.actor_id) t1
+WHERE actors_rank IN (1,2,3)
+
+  
+-- Output cities with the number of active and inactive customers (active - customer.active = 1). 
+-- Sort by the number of inactive customers in descending order
+SELECT ct.city, 
+       COUNT(*) FILTER (where active=1) AS active_users,
+	   COUNT(*) FILTER (where active=0) AS inactive_users
+FROM customer cus
+LEFT JOIN address a using(address_id)
+LEFT JOIN city ct using(city_id)
+GROUP BY ct.city
+ORDER BY inactive_users DESC
+
+
+-- Output the category of movies that have the highest number of 
+-- total rental hours in the city (customer.address_id in this city) and that 
+-- start with the letter “a”. Do the same for cities that have a “-” in them. 
+-- Write everything in one query.
+
+WITH rental_hour AS (
+    SELECT c.name, 
+	       ct.city,
+		  ROUND(SUM(EXTRACT(epoch from (return_date-rental_date))/3600), 2) AS rental_hours
+	FROM film_category fc
+	LEFT JOIN category c USING(category_id)
+	LEFT JOIN inventory i using(film_id)
+	LEFT JOIN rental rent USING(inventory_id)
+	LEFT JOIN customer cus USING(customer_id)
+	LEFT JOIN address using(address_id)
+	LEFT JOIN city ct using(city_id)
+	WHERE return_date IS NOT NULL 
+	GROUP BY c.name, ct.city
+)
+
+SELECT name, 
+       city,
+       rental_hours
+FROM (SELECT *,
+		   rank() OVER(PARTITION BY city ORDER BY rental_hours DESC) as rnk
+	FROM rental_hour
+	WHERE city ILIKE 'a%' 
+	      OR city ILIKE '%-%') t1 
+WHERE rnk=1	
+ORDER BY rental_hours DESC
+
+
+
+
