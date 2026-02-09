@@ -6,13 +6,18 @@ GROUP BY category.name
 ORDER BY movie_count DESC
 
   
---Output the 10 actors whose movies rented the most, sorted in descending order
+--Output the 10 actors whose movies rented the most, sorted in descending order (NEW VERSION)!
 SELECT a.first_name, 
-       a.last_name, 
-	   COUNT(fa.film_id) AS rental_count
-FROM actor a LEFT JOIN film_actor fa using(actor_id)
-GROUP BY a.actor_id
-ORDER BY rental_count DESC
+       a.last_name
+FROM 	   
+	(SELECT fa.actor_id,
+		   COUNT(r.rental_id) AS rental_count
+	FROM film_actor fa
+	LEFT JOIN inventory i using(film_id)
+	LEFT JOIN rental r using(inventory_id)
+	GROUP BY fa.actor_id
+	ORDER BY rental_count DESC) t1 
+LEFT JOIN actor a using(actor_id)
 LIMIT 10
 
 -- Output the category of movies on which the most money was spent
@@ -37,26 +42,31 @@ WHERE i.film_id IS NULL
   
 -- Output the top 3 actors who have appeared the most in movies in the “Children” category. 
 -- If several actors have the same number of movies, output all of them.
-SELECT first_name,
-	   last_name
-FROM (SELECT c.name,
-		   a.first_name,
-		   a.last_name,
-		   DENSE_RANK() OVER(ORDER BY COUNT(*) DESC) AS actors_rank
-	FROM actor a 
-	LEFT JOIN film_actor using(actor_id)
-	LEFT JOIN film_category using(film_id)
-	LEFT JOIN category c using(category_id)  
-	WHERE c.name='Children' 
-	GROUP BY c.name, a.actor_id) t1
-WHERE actors_rank IN (1,2,3)
+WITH AS ranked_actors
+       (
+		SELECT c.name,
+				a.first_name,
+				a.last_name,
+				DENSE_RANK() OVER(ORDER BY COUNT(*) DESC) AS actors_rank
+			FROM actor a 
+			LEFT JOIN film_actor using(actor_id)
+			LEFT JOIN film_category using(film_id)
+			LEFT JOIN category c using(category_id)  
+			WHERE c.name='Children' 
+			GROUP BY c.name, a.actor_id)
+
+SELECT ra.first_name,
+	   ra.last_name
+FROM ranked_actors ra
+WHERE actors_rank <=3
 
   
 -- Output cities with the number of active and inactive customers (active - customer.active = 1). 
 -- Sort by the number of inactive customers in descending order
+
 SELECT ct.city, 
-       COUNT(*) FILTER (where active=1) AS active_users,
-	   COUNT(*) FILTER (where active=0) AS inactive_users
+       SUM(CASE WHEN cus.active=1 THEN 1 ELSE 0 END) AS active_users,
+	   SUM(CASE WHEN cus.active=0 THEN 1 ELSE 0 END) AS inactive_users
 FROM customer cus
 LEFT JOIN address a using(address_id)
 LEFT JOIN city ct using(city_id)
@@ -72,7 +82,7 @@ ORDER BY inactive_users DESC
 WITH rental_hour AS (
     SELECT c.name, 
 	       ct.city,
-		  ROUND(SUM(EXTRACT(epoch from (return_date-rental_date))/3600), 2) AS rental_hours
+		  ROUND(SUM(EXTRACT(epoch from (COALESCE(return_date, NOW())-rental_date))/3600), 2) AS rental_hours
 	FROM film_category fc
 	LEFT JOIN category c USING(category_id)
 	LEFT JOIN inventory i using(film_id)
@@ -80,7 +90,6 @@ WITH rental_hour AS (
 	LEFT JOIN customer cus USING(customer_id)
 	LEFT JOIN address using(address_id)
 	LEFT JOIN city ct using(city_id)
-	WHERE return_date IS NOT NULL 
 	GROUP BY c.name, ct.city
 )
 
