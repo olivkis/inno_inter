@@ -42,7 +42,7 @@ WHERE i.film_id IS NULL
   
 -- Output the top 3 actors who have appeared the most in movies in the “Children” category. 
 -- If several actors have the same number of movies, output all of them.
-WITH AS ranked_actors
+WITH ranked_actors AS 
        (
 		SELECT c.name,
 				a.first_name,
