@@ -7,16 +7,19 @@ ORDER BY movie_count DESC
 
   
 --Output the 10 actors whose movies rented the most, sorted in descending order (NEW VERSION)!
-SELECT a.first_name, 
-       a.last_name
-FROM 	   
-	(SELECT fa.actor_id,
+WITH actors_rental AS (
+	SELECT fa.actor_id,
 		   COUNT(r.rental_id) AS rental_count
 	FROM film_actor fa
 	LEFT JOIN inventory i using(film_id)
 	LEFT JOIN rental r using(inventory_id)
 	GROUP BY fa.actor_id
-	ORDER BY rental_count DESC) t1 
+	ORDER BY rental_count DESC
+)
+
+SELECT a.first_name, 
+       a.last_name
+FROM actors_rental
 LEFT JOIN actor a using(actor_id)
 LIMIT 10
 
@@ -79,7 +82,7 @@ ORDER BY inactive_users DESC
 -- start with the letter “a”. Do the same for cities that have a “-” in them. 
 -- Write everything in one query.
 
-WITH rental_hour AS (
+WITH city_rental_hour AS (
     SELECT c.name, 
 	       ct.city,
 		  ROUND(SUM(EXTRACT(epoch from (COALESCE(return_date, NOW())-rental_date))/3600), 2) AS rental_hours
@@ -91,19 +94,36 @@ WITH rental_hour AS (
 	LEFT JOIN address using(address_id)
 	LEFT JOIN city ct using(city_id)
 	GROUP BY c.name, ct.city
-)
+	),
+	
+	category_types AS (
+	   SELECT CASE 
+		       WHEN city ILIKE 'a%' THEN 'starts_with_a'
+			   WHEN city LIKE '%-%' THEN 'has_dash'
+			   END AS category_type, 
+			   city,
+			   name,
+			   RANK() OVER(PARTITION BY city ORDER BY rental_hours DESC) AS rnk, 
+			   rental_hours
+	   FROM city_rental_hour
+	   WHERE city ILIKE 'a%' OR city LIKE '%-%'
+	),
 
+	max_rental_hours AS (
+		SELECT category_type, 
+			   name, 
+			   SUM(rental_hours) AS total_group_hours
+		FROM category_types ct
+		GROUP BY category_type, name
+	), 
+
+	ranked_category AS (
+		SELECT *, 
+	   		RANK() OVER(PARTITION BY category_type ORDER BY total_group_hours DESC) AS rnk
+		FROM max_rental_hours
+	)
+	
 SELECT name, 
-       city,
-       rental_hours
-FROM (SELECT *,
-		   rank() OVER(PARTITION BY city ORDER BY rental_hours DESC) as rnk
-	FROM rental_hour
-	WHERE city ILIKE 'a%' 
-	      OR city ILIKE '%-%') t1 
-WHERE rnk=1	
-ORDER BY rental_hours DESC
-
-
-
-
+       category_type
+FROM ranked_category
+WHERE rnk=1
