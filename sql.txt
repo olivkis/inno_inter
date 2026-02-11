@@ -14,13 +14,13 @@ WITH actors_rental AS (
 	LEFT JOIN inventory i using(film_id)
 	LEFT JOIN rental r using(inventory_id)
 	GROUP BY fa.actor_id
-	ORDER BY rental_count DESC
 )
 
 SELECT a.first_name, 
        a.last_name
 FROM actors_rental
 LEFT JOIN actor a using(actor_id)
+ORDER BY rental_count DESC
 LIMIT 10
 
 -- Output the category of movies on which the most money was spent
