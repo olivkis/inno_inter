@@ -84,7 +84,7 @@ ORDER BY inactive_users DESC
 
 WITH city_rental_hour AS (
     SELECT c.name, 
-	       ct.city,
+	      ct.city,
 		  ROUND(SUM(EXTRACT(epoch from (COALESCE(return_date, NOW())-rental_date))/3600), 2) AS rental_hours
 	FROM film_category fc
 	LEFT JOIN category c USING(category_id)
@@ -94,33 +94,26 @@ WITH city_rental_hour AS (
 	LEFT JOIN address using(address_id)
 	LEFT JOIN city ct using(city_id)
 	GROUP BY c.name, ct.city
-	),
+	), 
 	
 	category_types AS (
-	   SELECT CASE 
-		       WHEN city ILIKE 'a%' THEN 'starts_with_a'
+	SELECT CASE 
+		       WHEN LOWER(city) LIKE 'a%' THEN 'starts_with_a'
 			   WHEN city LIKE '%-%' THEN 'has_dash'
 			   END AS category_type, 
-			   city,
-			   name,
-			   RANK() OVER(PARTITION BY city ORDER BY rental_hours DESC) AS rnk, 
-			   rental_hours
-	   FROM city_rental_hour
-	   WHERE city ILIKE 'a%' OR city LIKE '%-%'
+		   name,	
+		   SUM(rental_hours) AS rental_hours
+	FROM city_rental_hour
+	WHERE LOWER(city) LIKE 'a%' OR city LIKE '%-%'
+	GROUP BY category_type, name
 	),
 
-	max_rental_hours AS (
-		SELECT category_type, 
-			   name, 
-			   SUM(rental_hours) AS total_group_hours
-		FROM category_types ct
-		GROUP BY category_type, name
-	), 
-
 	ranked_category AS (
-		SELECT *, 
-	   		RANK() OVER(PARTITION BY category_type ORDER BY total_group_hours DESC) AS rnk
-		FROM max_rental_hours
+	SELECT category_type, 
+		   name, 
+		   rental_hours,
+		   RANK() OVER(PARTITION BY category_type ORDER BY rental_hours) AS rnk
+	FROM category_types
 	)
 	
 SELECT name, 
